@@ -1,0 +1,142 @@
+---
+title: "<center> <h1> Project 1</h1> <center>"
+author: "<center> Areeb Akhter<center>"
+date: "<center> October 23 2020 <center>"
+output:
+  pdf_document: default
+  html_document: default
+fig_width: 16
+fig_height: 3
+fontsize: 12pt
+---
+
+### **Load Libraries**
+
+```{r,warning=FALSE,message=FALSE}
+library (fpp2)
+library(knitr)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo =  TRUE)
+```
+### **Import Data(Dates pre-adjusted)**
+```{r}
+retail<- read.csv("Hidden")
+```
+
+### **Convert to Time series**
+```{r}
+df = retail
+df = ts(df, start=2010, frequency=12)
+y = df[,"MRTSSM4453USN"]
+View(y)
+```
+### **Seasonlity & Trend for Sales Data**
+```{r,warning=FALSE, fig.width=15, r,warning=FALSE}
+ Szn=ggseasonplot(y, year.labels=TRUE, year.labels.left=TRUE) +
+  ylab("$ million") +
+  ggtitle("Seasonal plot: US Retail Sales of Beer, Wine, Liquor")
+
+Trend = autoplot(y, series="Data") + 
+  autolayer(ma(y,12), series="Trend") +
+  xlab("Year") + ylab("$ millions") +
+  ggtitle("Trend plot: US Retail Sales of Beer, Wine, Liquor") +
+  scale_colour_manual(values=c("Data"="blue","Trend"="red"),
+                      breaks=c("Data","Trend"))
+gridExtra::grid.arrange(Szn, Trend, nrow=1) 
+```
+
+The seasonality for beer, wine and liquor all show huge spikes in the month of November till decemeber for each year as Americans tend to enjoy beer more during the end of the year. In terms of seasonality the performance is realtively better than the previous years and continues to trend upwards in sales. The year 2020 stands alone as an outlier with rates far higher what is generally expected at the June-July time based of seasonality of this market. These results show that COVID-19 has helped grow the US beer, liquor and wine industry.
+
+
+### **Classical Decomposition & STL Decomposition Analysis**         
+```{r, figures-side, fig.show="hold", out.width="50%"}
+#Classical Decomposition Analysis
+y %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Classical multiplicative decomposition
+    of US Retail Sales")
+
+#STL Decomposition Analysis
+y %>% stl(t.window=13, s.window="periodic", robust=TRUE) %>%
+  autoplot() + xlab("Year") +
+  ggtitle("STL decomposition of US Retail Sales of Beer, Wine, and Liquor")
+```
+"Although the graphs for the two look relatively similar their are some key differences. The classical decomposition doesn't factor changing seasonal components over time which is a problem, especially when looking at the data for 2020 or growth within the industry. While STL does a better job in handling seasonal changes and gives control to the user when it comes to smoothing. Lastly, the model being robust allows outliers such as 2020 to  not completely affect the forecast."
+
+### **Training and Test Data**
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+train = window(y,start=c(2010, 1),end=c(2018, 12), frequency = 12)
+
+test =  window(y,start=c(2019, 1),end=c(2020, 7), frequency = 12)
+both = window(y,start=c(2010, 1))
+h=length(test)
+```
+**Seasonal Naive Forecast**
+```{r}
+forecast1 <- snaive(train, h=h)
+p1 = autoplot(forecast1)
+```
+
+**Trend Plus Seasonal Forecast**
+```{r}
+tps <- tslm(train ~ trend + season)
+forecast2 = forecast(tps,h=h)
+p2 = autoplot(forecast2)
+```
+**Holt Winter's Forecast**
+```{r}
+forecast3 <- hw(train, seasonal="multiplicative", h=h) 
+p3 = autoplot(forecast3)
+```
+**STLF Naive Forecast**
+```{r}
+forecast4 <- stlf(train, method='naive')
+p4 = autoplot(forecast4)
+```
+**STLF ETS Forecast**
+```{r}
+forecast5 <- stlf(train, method='ets')
+p5 = autoplot(forecast5)
+```
+**ETS Forecast**
+```{r}
+forecast6 <- forecast(ets(train, model="ZZZ"), h=h)
+p6 = autoplot(forecast6)
+```
+### **Accuracy Test**
+```{r}
+a1 = accuracy(forecast1, test)
+a2 = accuracy(forecast2, test)
+a3 = accuracy(forecast3, test)
+a4 = accuracy(forecast4, test)
+a5 = accuracy(forecast5, test)
+a6 = accuracy(forecast6, test)
+```
+### **Combining forecast summary statistics into a table with row names**
+```{r}
+a.table<-rbind(a1, a2, a3, a4, a5, a6)
+
+row.names(a.table)<-c("Seasonal Naive Training","Seasonal Naive test", "Trend Plus Seasonal training", "Trend Plus Seasonal test", "Holt Winters Training", "Holt Winters Test" , "STLF Naive training","STLF Naive test", "STL ETS Training", "STL ETS test", "ETS Training", "ETS Test")
+```
+
+### **Table Ordered according to MASE Value**
+```{r}
+a.table<-as.data.frame(a.table)
+a.table<-a.table[order(a.table$MASE),]
+kable(a.table, caption = "Forecast Accuracy", digits = 4)
+```
+"The best fitting forecasting  method is STLF ETS Testing Method. This is due to when comparing to the other measures we notice it  has the highest accuracy. The RMSE is lower than the rest meaning less deviation of the residuals compared to other forecasting methods. The MAE shows it is the closest to the testing data with smallest absolute average. The MAPE and MASE show STLF ETS is the most accurate due it have the smallest value. Therefore the STLF ETS testing method is the most accurate form."
+
+### **Forecast 12 periods into the Future**
+```{r fig.height=4, fig.width=8}
+autoplot(stlf(y, method='ets'))
+stlf(y, h=12)
+```
+### **Residuals for STLF ETS**
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+checkresiduals(forecast5)
+```
+
+"The histogram is a bi-modal graph shows that this is not a normal distribution. The ACF shows a large variance therefore lacking any sort of correlation. The mean for this is 11.59 which is a non-zero mean. Based of this information we can conclude that this forecast has room to improve but still does a good job."
